@@ -5,3 +5,5 @@ transformers==4.46.3
 torch>=2.2.0
 scikit-learn==1.5.2
 python-dateutil==2.9.0.post0
+pandas==2.2.3
+yfinance==0.2.42
