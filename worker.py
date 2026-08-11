@@ -1,5 +1,22 @@
+import os
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent
+VENV_PYTHON = ROOT_DIR / ".venv" / "bin" / "python"
+
+if "AI_TRADING_BOOTSTRAPPED" not in os.environ:
+    if VENV_PYTHON.exists():
+        current_python = Path(sys.executable).resolve()
+        if current_python != VENV_PYTHON.resolve():
+            try:
+                import numpy  # type: ignore
+                import transformers  # type: ignore
+            except ModuleNotFoundError:
+                os.environ["AI_TRADING_BOOTSTRAPPED"] = "1"
+                os.execv(str(VENV_PYTHON), [str(VENV_PYTHON)] + sys.argv)
 
 from app.config import (
     TICKER_MASTER_FILE,

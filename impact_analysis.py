@@ -1,22 +1,5 @@
-import os
-import sys
-from pathlib import Path
-
-ROOT_DIR = Path(__file__).resolve().parent
-VENV_PYTHON = ROOT_DIR / ".venv" / "bin" / "python"
-
-if "IMPACT_ANALYSIS_BOOTSTRAPPED" not in os.environ:
-    if VENV_PYTHON.exists():
-        current_python = Path(sys.executable).resolve()
-        venv_python = VENV_PYTHON.resolve()
-        if current_python != venv_python:
-            try:
-                import yfinance  # type: ignore
-            except ModuleNotFoundError:
-                os.environ["IMPACT_ANALYSIS_BOOTSTRAPPED"] = "1"
-                os.execv(str(venv_python), [str(venv_python)] + sys.argv)
-
 import argparse
+from pathlib import Path
 
 from app.config import OUTPUT_DIR
 from app.impact_pipeline import ImpactPipeline
@@ -46,9 +29,7 @@ def main():
     news_file = Path(args.news_file)
 
     if not news_file.exists():
-        raise FileNotFoundError(
-            f"News file not found: {news_file}"
-        )
+        raise FileNotFoundError(f"News file not found: {news_file}")
 
     print("=== AI Trading Impact Analysis ===")
     print(f"Loading news from: {news_file}")
