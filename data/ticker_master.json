@@ -1,0 +1,59 @@
+[
+  {
+    "ticker": "BBCA",
+    "name": "Bank Central Asia",
+    "aliases": [
+      "BCA",
+      "Bank BCA",
+      "Bank Central Asia",
+      "PT Bank Central Asia"
+    ]
+  },
+  {
+    "ticker": "BBRI",
+    "name": "Bank Rakyat Indonesia",
+    "aliases": [
+      "BRI",
+      "Bank BRI",
+      "Bank Rakyat Indonesia",
+      "PT Bank Rakyat Indonesia"
+    ]
+  },
+  {
+    "ticker": "BMRI",
+    "name": "Bank Mandiri",
+    "aliases": [
+      "Mandiri",
+      "Bank Mandiri",
+      "PT Bank Mandiri"
+    ]
+  },
+  {
+    "ticker": "TLKM",
+    "name": "Telkom Indonesia",
+    "aliases": [
+      "Telkom",
+      "Telkom Indonesia",
+      "PT Telkom Indonesia"
+    ]
+  },
+  {
+    "ticker": "ASII",
+    "name": "Astra International",
+    "aliases": [
+      "Astra",
+      "Astra International",
+      "PT Astra International"
+    ]
+  },
+  {
+    "ticker": "BBNI",
+    "name": "Bank Negara Indonesia",
+    "aliases": [
+      "BNI",
+      "Bank BNI",
+      "Bank Negara Indonesia",
+      "PT Bank Negara Indonesia"
+    ]
+  }
+]
