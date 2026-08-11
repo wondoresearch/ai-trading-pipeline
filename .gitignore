@@ -1,6 +1,27 @@
-.venv/
+# Python bytecode / cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables & secrets
 .env
-output/*.json
-output/*.jsonl
+.env.local
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+
+# Output & Data directories
+data/
+output/
+*.log
+
+# OS-generated files
+.DS_Store
