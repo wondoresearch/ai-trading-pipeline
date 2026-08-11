@@ -6,6 +6,7 @@ import logging
 import pandas as pd
 import requests
 import yfinance as yf
+from typing import Dict, Optional
 from requests.exceptions import RequestException
 from yfinance.utils import UnknownTimeZoneError
 
@@ -18,6 +19,15 @@ class PriceProvider:
     def __init__(self, market_suffix=".JK"):
         self.market_suffix = market_suffix
         self.cache = {}
+        self.last_error: Optional[Dict[str, str]] = None
+
+    @staticmethod
+    def _error_payload(stage: str, exc: Exception) -> Dict[str, str]:
+        return {
+            "stage": stage,
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }
 
     def _yf_symbol(self, ticker: str) -> str:
         ticker = str(ticker).strip().upper()
@@ -102,6 +112,7 @@ class PriceProvider:
         )
 
     def get_history(self, ticker, start, end):
+        self.last_error = None
         yf_ticker = self._yf_symbol(ticker)
         cache_key = (yf_ticker, str(start), str(end))
 
@@ -118,6 +129,7 @@ class PriceProvider:
             ValueError,
             RequestException,
         ) as exc:
+            self.last_error = self._error_payload("yahoo_chart", exc)
             logger.warning("Yahoo chart fetch failed for %s: %s", yf_ticker, exc)
 
         if df.empty:
@@ -139,6 +151,7 @@ class PriceProvider:
                 TimeoutError,
                 RequestException,
             ) as exc:
+                self.last_error = self._error_payload("yfinance_download", exc)
                 logger.warning("yfinance download failed for %s: %s", yf_ticker, exc)
 
         if df.empty:
@@ -158,6 +171,7 @@ class PriceProvider:
                 TimeoutError,
                 RequestException,
             ) as exc:
+                self.last_error = self._error_payload("yfinance_history", exc)
                 logger.warning(
                     "yfinance history fallback failed for %s: %s",
                     yf_ticker,
@@ -168,11 +182,28 @@ class PriceProvider:
         if df.empty:
             return pd.DataFrame()
 
+        self.last_error = None
         try:
             df = self._normalize_dataframe(df)
         except ValueError as exc:
+            self.last_error = self._error_payload("normalize", exc)
             logger.warning("Invalid price data for %s: %s", yf_ticker, exc)
             return pd.DataFrame()
 
         self.cache[cache_key] = df
+        self.last_error = None
         return df
+
+    def get_history_with_status(self, ticker, start, end):
+        """Return (history, status) while preserving get_history compatibility."""
+        try:
+            df = self.get_history(ticker, start, end)
+        except Exception as exc:
+            self.last_error = self._error_payload("get_history", exc)
+            return pd.DataFrame(), "provider_error"
+
+        if self.last_error is not None and df.empty:
+            return df, "provider_error"
+        if df.empty:
+            return df, "empty"
+        return df, "ok"
