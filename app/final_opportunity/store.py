@@ -48,7 +48,6 @@ class Store:
         path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(path) as db:
             db.executescript(SCHEMA)
-            # Safe additive migration for databases created by the first ZIP.
             cols = {r[1] for r in db.execute("PRAGMA table_info(prices)")}
             if "adj_close" not in cols:
                 db.execute("ALTER TABLE prices ADD COLUMN adj_close REAL")
@@ -87,9 +86,14 @@ class Store:
                   r.get("sentiment_source")) for r in rows],
             )
 
-    def prices(self, ticker: str) -> list[dict]:
+    def prices(self, ticker: str, cutoff: str | None = None) -> list[dict]:
         with sqlite3.connect(self.path) as db:
             db.row_factory = sqlite3.Row
+            if cutoff:
+                return [dict(x) for x in db.execute(
+                    "SELECT * FROM prices WHERE ticker=? AND trading_date<=? ORDER BY trading_date",
+                    (ticker, cutoff)
+                )]
             return [dict(x) for x in db.execute(
                 "SELECT * FROM prices WHERE ticker=? ORDER BY trading_date", (ticker,)
             )]

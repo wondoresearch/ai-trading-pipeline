@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from datetime import date, datetime
-from typing import Any, Callable, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable
 
 
 @dataclass(frozen=True)
@@ -31,12 +30,7 @@ def _clamp(x: Any, lo: float, hi: float) -> float:
 
 
 class OpportunityOrchestrator:
-    """Dependency-injected integration boundary.
-
-    Providers are functions/callables supplied by the existing application.
-    This keeps the integration additive and avoids coupling to provider
-    implementations or network access during tests.
-    """
+    """Dependency-injected integration boundary with a fail-closed PIT guard."""
 
     def __init__(
         self,
@@ -50,7 +44,9 @@ class OpportunityOrchestrator:
             raise ValueError("overlay_limit must be positive")
         self.market_score = market_score
         self.fundamental_adjustment = fundamental_adjustment
-        self.event_time_eligible = event_time_eligible or (lambda ticker: True)
+        # Historical/PIT safety must fail closed. A caller must explicitly
+        # prove event-time eligibility before fundamentals can affect ranking.
+        self.event_time_eligible = event_time_eligible or (lambda ticker: False)
         self.overlay_limit = float(overlay_limit)
 
     def evaluate(self, ticker: str) -> OpportunityResult:
@@ -73,14 +69,9 @@ class OpportunityOrchestrator:
 
         composite = _clamp(base + overlay, 0.0, 1.0)
         return OpportunityResult(
-            ticker=ticker,
-            base_score=base,
-            fundamental_overlay=overlay,
-            composite_score=composite,
-            fundamental_confidence=confidence,
-            event_time_eligible=eligible,
-            status=status,
-            reasons=reasons,
+            ticker=ticker, base_score=base, fundamental_overlay=overlay,
+            composite_score=composite, fundamental_confidence=confidence,
+            event_time_eligible=eligible, status=status, reasons=reasons,
         )
 
     def rank(self, tickers: Iterable[str]) -> list[OpportunityResult]:

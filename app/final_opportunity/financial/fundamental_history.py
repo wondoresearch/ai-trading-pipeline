@@ -34,7 +34,16 @@ class FundamentalHistory:
         return value if isinstance(value, list) else []
 
     @staticmethod
-    def feature_from_rows(rows: list[Any]):
+    def _sort_key(row: Any) -> str:
+        if isinstance(row, dict):
+            return str(row.get("fiscal_year_end") or row.get("fs_date") or "")
+        return str(getattr(row, "fiscal_year_end", "") or getattr(row, "fs_date", ""))
+
+    @classmethod
+    def feature_from_rows(cls, rows: list[Any]):
         if not rows:
             return None
-        return build_fundamental_features(rows[0], rows[1] if len(rows) > 1 else None)
+        ordered = sorted(rows, key=cls._sort_key, reverse=True)
+        return build_fundamental_features(
+            ordered[0], ordered[1] if len(ordered) > 1 else None
+        )

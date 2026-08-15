@@ -23,37 +23,28 @@ def main():
     )
     ap.add_argument("--input", required=True)
     ap.add_argument("-o", "--output", required=True)
-    ap.add_argument(
-        "--require-financial-evidence",
-        action="store_true",
-        help="Require independently captured publication evidence for fundamentals.",
-    )
     args = ap.parse_args()
 
     src = json.loads(Path(args.input).read_text(encoding="utf-8"))
     rows = []
 
     for x in src:
-        history = []
-        for f in x.get("financial_history", []):
-            history.append(
-                FinancialHistory(
-                    ticker=x["ticker"],
-                    financial_period_end=date.fromisoformat(
-                        f["financial_period_end"]
-                    ),
-                    publication_date=(
-                        date.fromisoformat(f["publication_date"])
-                        if f.get("publication_date")
-                        else None
-                    ),
-                    fundamental_score=f.get("fundamental_score"),
-                    source=f.get("source", ""),
-                    evidence_level=f.get("evidence_level"),
-                    publication_timestamp=f.get("publication_timestamp"),
-                    source_url=f.get("source_url"),
-                )
+        history = [
+            FinancialHistory(
+                ticker=x["ticker"],
+                financial_period_end=date.fromisoformat(f["financial_period_end"]),
+                publication_date=(
+                    date.fromisoformat(f["publication_date"])
+                    if f.get("publication_date") else None
+                ),
+                fundamental_score=f.get("fundamental_score"),
+                source=f.get("source", ""),
+                evidence_level=f.get("evidence_level"),
+                publication_timestamp=f.get("publication_timestamp"),
+                source_url=f.get("source_url"),
             )
+            for f in x.get("financial_history", [])
+        ]
 
         state = build_pit_state(
             x["ticker"],
@@ -64,7 +55,7 @@ def main():
             news_score=x.get("news_score"),
             news_source=x.get("news_source"),
             financial_history=history,
-            require_financial_evidence=args.require_financial_evidence,
+            require_financial_evidence=True,
         )
         rows.append(state.to_dict())
 

@@ -43,6 +43,10 @@ class PITState:
         return d
 
 
+def _normalize_ticker(value: str) -> str:
+    return str(value or "").upper().replace(".JK", "")
+
+
 def latest_eligible_financial(
     ticker: str,
     history: Iterable[FinancialHistory],
@@ -50,44 +54,11 @@ def latest_eligible_financial(
     *,
     require_evidence: bool = False,
 ):
-    """Return the latest financial fact for the requested ticker
-    that was provably available by ``as_of``.
-    """
-    normalized_ticker = ticker.upper().replace(".JK", "")
-
-    candidates = [
-        x
-        for x in history
-        if x.ticker
-        and x.ticker.upper().replace(".JK", "") == normalized_ticker
-        and x.publication_date is not None
-        and x.publication_date <= as_of
-        and x.financial_period_end <= as_of
-        and (
-            not require_evidence
-            or bool(x.evidence_level)
-        )
-    ]
-
-    if not candidates:
-        return None
-
-    return max(
-        candidates,
-        key=lambda x: (
-            x.financial_period_end,
-            x.publication_date,
-        ),
-    )
-    """Return the latest financial fact provably available by ``as_of``.
-
-    Historical reconstruction must set require_evidence=True. A publication
-    date without an evidence level is intentionally not sufficient for a
-    historical PIT fundamental feature.
-    """
+    """Return the latest financial fact for ``ticker`` provably available by ``as_of``."""
+    normalized_ticker = _normalize_ticker(ticker)
     candidates = [
         x for x in history
-        if x.ticker
+        if _normalize_ticker(x.ticker) == normalized_ticker
         and x.publication_date is not None
         and x.publication_date <= as_of
         and x.financial_period_end <= as_of
@@ -117,7 +88,7 @@ def build_pit_state(
         require_evidence=require_financial_evidence,
     )
     return PITState(
-        ticker=ticker.upper().replace(".JK", ""),
+        ticker=_normalize_ticker(ticker),
         as_of=as_of,
         publication_date=fin.publication_date if fin else None,
         financial_period_end=fin.financial_period_end if fin else None,
@@ -136,6 +107,7 @@ def build_pit_state(
 
 
 def audit_pit_states(rows):
+    """Audit a reconstructed snapshot under the strict historical PIT contract."""
     seen = set()
     duplicates = []
     lookahead = []
@@ -143,7 +115,7 @@ def audit_pit_states(rows):
     unevidenced_financial = []
 
     for r in rows:
-        key = (r["ticker"], r["as_of"])
+        key = (_normalize_ticker(r.get("ticker")), r["as_of"])
         if key in seen:
             duplicates.append(key)
         seen.add(key)

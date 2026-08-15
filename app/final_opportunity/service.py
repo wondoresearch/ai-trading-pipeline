@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
-import json, math
+import math
 from .config import Config
 from .market import YahooFinanceMarketData
 from .news import fetch_google_news
@@ -60,8 +60,10 @@ class ResearchService:
         errors = []
         for ticker in sorted({x.strip().upper().replace(".JK", "") for x in tickers if x.strip()}):
             try:
+                # Both market and news observations are explicitly cut at the
+                # requested as_of. This is required for historical reconstruction.
                 row = score_ticker(
-                    ticker, self.store.prices(ticker), self.store.news(ticker, 100, cutoff),
+                    ticker, self.store.prices(ticker, cutoff), self.store.news(ticker, 100, cutoff),
                     horizon, self.config.min_price_observations, self.config.min_event_observations
                 )
                 rows.append(row)
@@ -69,7 +71,7 @@ class ResearchService:
                 errors.append({"ticker":ticker, "error":str(exc)})
         rows.sort(key=lambda x: (-x.score, x.ticker))
         result = {
-            "schema_version":"final-1.1",
+            "schema_version":"final-1.2",
             "purpose":"research_opportunity_ranking",
             "live_trading":False,
             "data_source":"yahoo_finance_personal_research",

@@ -1,8 +1,8 @@
 """Sector-aware fundamental feature engine.
 
-Pure functions only: no network calls. Works with the normalized FinancialObservation
-objects already used by the financial provider layer. Missing metrics are ignored
-rather than treated as zero.
+Pure functions only: no network calls. Accepts both the normalized
+FinancialObservation field names used by the provider layer and the
+semantic aliases used by older feature fixtures.
 """
 from __future__ import annotations
 
@@ -35,14 +35,17 @@ class FundamentalFeatures:
         return d
 
 
-def _get(row: Any, name: str) -> Optional[float]:
-    value = getattr(row, name, None)
-    try:
-        if value is None:
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+def _get(row: Any, name: str, aliases: tuple[str, ...] = ()) -> Optional[float]:
+    for key in (name, *aliases):
+        value = getattr(row, key, None)
+        try:
+            if value is None:
+                continue
+            value = float(value)
+            return value
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _growth(current: Optional[float], previous: Optional[float]) -> Optional[float]:
@@ -69,7 +72,6 @@ def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
 def _growth_component(x: Optional[float]) -> Optional[float]:
     if x is None:
         return None
-    # Saturating transform: +20% is strong, -20% is weak.
     return _clamp(0.5 + x / 0.4)
 
 
@@ -83,28 +85,39 @@ def _sector_profile(sector: str, sub_industry: str = "") -> str:
     s = f"{sector} {sub_industry}".lower()
     if any(k in s for k in ("bank", "financial", "finansial")):
         return "banking"
-    if any(k in s for k in ("coal", "mining", "mineral", "mineral", "energy")):
+    if any(k in s for k in ("coal", "mining", "mineral", "energy")):
         return "resources"
     if any(k in s for k in ("manufactur", "industrial", "consumer", "automotive")):
         return "industrial"
     return "general"
 
 
-def build_fundamental_features(
-    current: Any,
-    previous: Any | None = None,
-) -> FundamentalFeatures:
+def build_fundamental_features(current: Any, previous: Any | None = None) -> FundamentalFeatures:
     sector = str(getattr(current, "sector", "") or "")
     sub_industry = str(getattr(current, "sub_industry", "") or "")
     profile = _sector_profile(sector, sub_industry)
 
-    revenue_growth = _growth(_get(current, "revenue"), _get(previous, "revenue") if previous else None)
-    net_income_growth = _growth(_get(current, "net_income"), _get(previous, "net_income") if previous else None)
-    eps_growth = _growth(_get(current, "eps"), _get(previous, "eps") if previous else None)
+    # Provider model aliases: Sales -> revenue, Profit for the Period /
+    # attributable profit -> net income. This keeps the engine connected to
+    # the actual IDX/Yahoo normalization contract instead of silently producing
+    # empty growth features.
+    revenue = _get(current, "revenue", ("sales",))
+    prev_revenue = _get(previous, "revenue", ("sales",)) if previous else None
+    net_income = _get(current, "net_income", ("profit_attributed", "profit"))
+    prev_net_income = _get(previous, "net_income", ("profit_attributed", "profit")) if previous else None
+    eps = _get(current, "eps")
+    prev_eps = _get(previous, "eps") if previous else None
 
-    gross_margin = _margin(_get(current, "gross_profit"), _get(current, "revenue"))
-    operating_margin = _margin(_get(current, "operating_income"), _get(current, "revenue"))
-    net_margin = _margin(_get(current, "net_income"), _get(current, "revenue"))
+    gross_profit = _get(current, "gross_profit")
+    operating_income = _get(current, "operating_income")
+
+    revenue_growth = _growth(revenue, prev_revenue)
+    net_income_growth = _growth(net_income, prev_net_income)
+    eps_growth = _growth(eps, prev_eps)
+
+    gross_margin = _margin(gross_profit, revenue)
+    operating_margin = _margin(operating_income, revenue)
+    net_margin = _margin(net_income, revenue)
 
     growth_score = _mean([
         _growth_component(revenue_growth),
@@ -117,10 +130,8 @@ def build_fundamental_features(
         _positive_component(net_margin),
     ])
 
-    # Sector-aware quality: bank metrics are not forced onto non-banks.
     quality_inputs = []
     if profile == "banking":
-        # ROE is a meaningful universal banking profitability measure when supplied.
         roe = _get(current, "roe")
         if roe is not None:
             quality_inputs.append(_positive_component(roe))
@@ -135,24 +146,17 @@ def build_fundamental_features(
         if roe is not None:
             quality_inputs.append(_positive_component(roe))
 
-    # For banks, revenue/gross-profit margins can be structurally different;
-    # don't penalize a bank merely because gross/operating income is absent.
     if profile == "banking":
         profitability_score = _mean([
             _growth_component(net_income_growth),
             _positive_component(_get(current, "roe")),
-        ]) if any(
-            x is not None for x in (net_income_growth, _get(current, "roe"))
-        ) else profitability_score
+        ]) if any(x is not None for x in (net_income_growth, _get(current, "roe"))) else profitability_score
 
     quality_score = _mean(quality_inputs)
     if quality_score is None:
         quality_score = 0.5
 
-    available = [
-        revenue_growth, net_income_growth, eps_growth,
-        gross_margin, operating_margin, net_margin,
-    ]
+    available = [revenue_growth, net_income_growth, eps_growth, gross_margin, operating_margin, net_margin]
     coverage = sum(x is not None for x in available) / len(available)
     confidence = _clamp(0.45 + coverage * 0.55)
 
@@ -203,7 +207,4 @@ def score_history(rows: list[Any]) -> FundamentalFeatures | None:
     if not rows:
         return None
     ordered = list(rows)
-    return build_fundamental_features(
-        ordered[0],
-        ordered[1] if len(ordered) > 1 else None,
-    )
+    return build_fundamental_features(ordered[0], ordered[1] if len(ordered) > 1 else None)
