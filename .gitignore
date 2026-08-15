@@ -25,3 +25,14 @@ output/
 
 # OS-generated files
 .DS_Store
+
+# Local development artifacts
+.phase_backups/
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Runtime outputs
+output/*.json

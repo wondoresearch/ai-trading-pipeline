@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opportunity Research</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f5f7fb;color:#172033}
+header{background:#123b75;color:white;padding:20px 28px}
+main{max-width:1200px;margin:24px auto;padding:0 18px}
+.card{background:white;border-radius:14px;padding:18px;margin-bottom:18px;box-shadow:0 2px 12px #00000010}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+input,button,select{padding:10px 12px;border:1px solid #ccd4e0;border-radius:8px}
+button{background:#123b75;color:white;cursor:pointer}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px;border-bottom:1px solid #edf0f5}
+.badge{padding:4px 8px;border-radius:999px;background:#edf2fa}
+.small{color:#64748b;font-size:13px}
+.error{color:#a61b1b}
+</style>
+</head>
+<body>
+<header><h2>Opportunity Research</h2><div class="small" style="color:#dbe8ff">Research only · no trading/execution</div></header>
+<main>
+<div class="card">
+<h3>Stock Universe</h3>
+<div class="row">
+<input id="tickers" style="min-width:360px" value="BBRI,BBCA,BMRI,BBNI">
+<select id="horizon"><option value="5">5D</option><option value="10">10D</option><option value="20" selected>20D</option><option value="60">60D</option></select>
+<label><input type="checkbox" id="refresh"> refresh real data</label>
+<button onclick="analyze()">Analyze</button>
+</div>
+<p class="small">Select the stocks you want to compare. Refresh fetches EOD market data and recent RSS news.</p>
+</div>
+<div class="card">
+<h3>Ranking</h3>
+<div id="status" class="small">Ready.</div>
+<table><thead><tr><th>#</th><th>Ticker</th><th>Score</th><th>Expected</th><th>Prob. Gain</th><th>Confidence</th><th>Risk</th><th>Sentiment</th><th>Evidence</th><th>Label</th></tr></thead><tbody id="rows"></tbody></table>
+</div>
+<div class="card">
+<h3>How to read</h3>
+<p class="small">Expected return is a transparent baseline combining historical momentum and recent sentiment. It is intentionally not presented as a validated ML prediction. The UI is a research decision-support tool, not a BUY/SELL or execution system.</p>
+</div>
+</main>
+<script>
+async function analyze(){
+ const tickers=document.getElementById('tickers').value;
+ const horizon=document.getElementById('horizon').value;
+ const refresh=document.getElementById('refresh').checked;
+ document.getElementById('status').textContent='Loading...';
+ try{
+   const r=await fetch(`/api/ranking?tickers=${encodeURIComponent(tickers)}&horizon=${horizon}&refresh=${refresh}`);
+   const d=await r.json();
+   document.getElementById('status').textContent=`As of ${d.as_of}. ${d.errors.length} error(s).`;
+   document.getElementById('rows').innerHTML=d.ranking.map(x=>`
+   <tr><td>${x.rank}</td><td><b>${x.ticker}</b></td>
+   <td>${x.score.toFixed(4)}</td><td>${(x.expected_return*100).toFixed(2)}%</td>
+   <td>${(x.probability_gain*100).toFixed(1)}%</td><td>${(x.confidence*100).toFixed(1)}%</td>
+   <td>${(x.downside_risk*100).toFixed(1)}%</td><td>${x.sentiment.toFixed(2)}</td>
+   <td>${x.event_sample}</td><td><span class="badge">${x.label}</span></td></tr>`).join('');
+ }catch(e){document.getElementById('status').innerHTML=`<span class="error">${e}</span>`}
+}
+</script>
+</body>
+</html>
