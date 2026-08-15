@@ -1,8 +1,9 @@
-
 from __future__ import annotations
+
 from dataclasses import dataclass, asdict
 from datetime import date
 from typing import Optional, Iterable
+
 
 @dataclass(frozen=True)
 class FinancialHistory:
@@ -11,6 +12,10 @@ class FinancialHistory:
     publication_date: Optional[date]
     fundamental_score: Optional[float]
     source: str = ""
+    evidence_level: Optional[str] = None
+    publication_timestamp: Optional[str] = None
+    source_url: Optional[str] = None
+
 
 @dataclass(frozen=True)
 class PITState:
@@ -26,6 +31,9 @@ class PITState:
     financial_source: Optional[str] = None
     market_source: Optional[str] = None
     news_source: Optional[str] = None
+    financial_evidence_level: Optional[str] = None
+    financial_publication_timestamp: Optional[str] = None
+    financial_source_url: Optional[str] = None
 
     def to_dict(self):
         d = asdict(self)
@@ -34,17 +42,61 @@ class PITState:
                 d[k] = d[k].isoformat()
         return d
 
-def latest_eligible_financial(history: Iterable[FinancialHistory], as_of: date):
+
+def latest_eligible_financial(
+    ticker: str,
+    history: Iterable[FinancialHistory],
+    as_of: date,
+    *,
+    require_evidence: bool = False,
+):
+    """Return the latest financial fact for the requested ticker
+    that was provably available by ``as_of``.
+    """
+    normalized_ticker = ticker.upper().replace(".JK", "")
+
+    candidates = [
+        x
+        for x in history
+        if x.ticker
+        and x.ticker.upper().replace(".JK", "") == normalized_ticker
+        and x.publication_date is not None
+        and x.publication_date <= as_of
+        and x.financial_period_end <= as_of
+        and (
+            not require_evidence
+            or bool(x.evidence_level)
+        )
+    ]
+
+    if not candidates:
+        return None
+
+    return max(
+        candidates,
+        key=lambda x: (
+            x.financial_period_end,
+            x.publication_date,
+        ),
+    )
+    """Return the latest financial fact provably available by ``as_of``.
+
+    Historical reconstruction must set require_evidence=True. A publication
+    date without an evidence level is intentionally not sufficient for a
+    historical PIT fundamental feature.
+    """
     candidates = [
         x for x in history
         if x.ticker
         and x.publication_date is not None
         and x.publication_date <= as_of
         and x.financial_period_end <= as_of
+        and (not require_evidence or bool(x.evidence_level))
     ]
     if not candidates:
         return None
     return max(candidates, key=lambda x: (x.financial_period_end, x.publication_date))
+
 
 def build_pit_state(
     ticker: str,
@@ -56,9 +108,14 @@ def build_pit_state(
     news_score: Optional[float] = None,
     news_source: Optional[str] = None,
     financial_history: Iterable[FinancialHistory] = (),
+    require_financial_evidence: bool = False,
 ):
-    fin = latest_eligible_financial(financial_history, as_of)
-    # A PIT row may exist without fundamentals; this is not a fabricated score.
+    fin = latest_eligible_financial(
+        ticker,
+        financial_history,
+        as_of,
+        require_evidence=require_financial_evidence,
+    )
     return PITState(
         ticker=ticker.upper().replace(".JK", ""),
         as_of=as_of,
@@ -72,29 +129,43 @@ def build_pit_state(
         financial_source=fin.source if fin else None,
         market_source=market_source,
         news_source=news_source,
+        financial_evidence_level=fin.evidence_level if fin else None,
+        financial_publication_timestamp=fin.publication_timestamp if fin else None,
+        financial_source_url=fin.source_url if fin else None,
     )
+
 
 def audit_pit_states(rows):
     seen = set()
     duplicates = []
     lookahead = []
     unknown_pub = []
+    unevidenced_financial = []
+
     for r in rows:
         key = (r["ticker"], r["as_of"])
         if key in seen:
             duplicates.append(key)
         seen.add(key)
+
         pub = r.get("publication_date")
         if pub and pub > r["as_of"]:
             lookahead.append(key)
-        if r.get("fundamental_score") is not None and not pub:
-            unknown_pub.append(key)
+
+        if r.get("fundamental_score") is not None:
+            if not pub:
+                unknown_pub.append(key)
+            if not r.get("financial_evidence_level"):
+                unevidenced_financial.append(key)
+
+    violations = duplicates + lookahead + unknown_pub + unevidenced_financial
     return {
-        "status": "PASS" if not duplicates and not lookahead and not unknown_pub else "FAIL",
+        "status": "PASS" if not violations else "FAIL",
         "rows": len(rows),
         "eligible": sum(bool(r.get("eligible")) for r in rows),
         "duplicate_observations": len(duplicates),
         "lookahead_violations": len(lookahead),
         "unknown_financial_publication": len(unknown_pub),
-        "violations_sample": [str(x) for x in (duplicates + lookahead + unknown_pub)[:10]],
+        "unevidenced_financial_observations": len(unevidenced_financial),
+        "violations_sample": [str(x) for x in violations[:10]],
     }
